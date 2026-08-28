@@ -18,20 +18,26 @@ function getOptionValue(args, name) {
 }
 
 function sendPublic(ctx, content) {
-    const channelId = ctx.channel?.id;
+    const channelId =
+        ctx?.channel?.id ??
+        findByStoreName("SelectedChannelStore")?.getChannelId?.();
+
     const formatted = `Self-bot\n>>> ${content}`;
 
     if (!channelId) {
-        console.error("[FunCommands] no channelId on ctx:", ctx);
+        console.error("[FunCommands] Could not determine channel ID:", ctx);
         return;
     }
+
     if (!MessageActions?.sendMessage) {
-        console.error("[FunCommands] MessageActions.sendMessage not found. MessageActions:", MessageActions);
+        console.error("[FunCommands] sendMessage unavailable");
         return;
     }
 
     try {
-        MessageActions.sendMessage(channelId, { content: formatted });
+        MessageActions.sendMessage(channelId, {
+            content: formatted,
+        });
     } catch (e) {
         console.error("[FunCommands] sendMessage threw:", e);
     }
