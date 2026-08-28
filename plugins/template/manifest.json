@@ -1,13 +1,13 @@
 {
-    "name": "Template Plugin",
-    "description": "A plugin for use as a template.",
+    "name": "Fun Commands",
+    "description": "A set of utility and fun slash commands.",
     "authors": [
         {
-            "name": "You!",
+            "name": "rootkit_tm",
             "id": "1367545898099408986"
         }
     ],
-    "main": "src/index.ts",
+    "main": "index.js",
     "vendetta": {
         "icon": "ic_badge_staff"
     }
