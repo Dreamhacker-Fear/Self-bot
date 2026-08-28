@@ -19,9 +19,22 @@ function getOptionValue(args, name) {
 
 function sendPublic(ctx, content) {
     const channelId = ctx.channel?.id;
-    if (!channelId || !MessageActions?.sendMessage) return;
     const formatted = `Self-bot\n>>> ${content}`;
-    MessageActions.sendMessage(channelId, { content: formatted });
+
+    if (!channelId) {
+        console.error("[FunCommands] no channelId on ctx:", ctx);
+        return;
+    }
+    if (!MessageActions?.sendMessage) {
+        console.error("[FunCommands] MessageActions.sendMessage not found. MessageActions:", MessageActions);
+        return;
+    }
+
+    try {
+        MessageActions.sendMessage(channelId, { content: formatted });
+    } catch (e) {
+        console.error("[FunCommands] sendMessage threw:", e);
+    }
 }
 
 const EIGHTBALL_ANSWERS = [
