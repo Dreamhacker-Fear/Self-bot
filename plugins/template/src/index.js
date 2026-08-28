@@ -4,6 +4,8 @@ import { findByProps, findByStoreName } from "@vendetta/metro";
 const UserStore = findByStoreName("UserStore");
 const MessageActions = findByProps("sendMessage");
 
+const unregisterFns = [];
+
 function getAvatarUrl(userId, size) {
     const user = UserStore.getUser(userId);
     if (!user) return null;
@@ -13,6 +15,13 @@ function getAvatarUrl(userId, size) {
 
 function getOptionValue(args, name) {
     return args.find((a) => a.name === name)?.value;
+}
+
+function sendPublic(ctx, content) {
+    const channelId = ctx.channel?.id;
+    if (!channelId || !MessageActions?.sendMessage) return;
+    const formatted = `Self-bot\n>>> ${content}`;
+    MessageActions.sendMessage(channelId, { content: formatted });
 }
 
 const EIGHTBALL_ANSWERS = [
@@ -51,8 +60,15 @@ function randomHexColor() {
     return "#" + n.toString(16).padStart(6, "0").toUpperCase();
 }
 
+function reg(command) {
+    const unregister = registerCommand(command);
+    if (typeof unregister === "function") {
+        unregisterFns.push(unregister);
+    }
+}
+
 export function onLoad() {
-    registerCommand({
+    reg({
         name: "avatar",
         description: "Show a user's avatar full size",
         options: [
@@ -61,98 +77,99 @@ export function onLoad() {
         execute: (args, ctx) => {
             const userId = getOptionValue(args, "user") ?? ctx.user?.id ?? UserStore.getCurrentUser()?.id;
             const url = getAvatarUrl(userId, 1024);
-            if (!url) return { content: "Could not find that user's avatar." };
-            return { content: url };
+            if (!url) return;
+            sendPublic(ctx, url);
         },
     });
 
-    registerCommand({
+    reg({
         name: "roll",
         description: "Roll dice, e.g. 2d6+3",
         options: [
             { name: "dice", description: "Dice notation, e.g. 2d6+3", type: 3, required: true },
         ],
-        execute: (args) => {
+        execute: (args, ctx) => {
             const dice = getOptionValue(args, "dice");
             const result = rollDice(dice);
-            if (!result) return { content: "Invalid dice format. Use something like 2d6+3." };
+            if (!result) return;
             const rollsText = result.rolls.join(", ");
             const modText = result.mod ? ` (${result.mod > 0 ? "+" : ""}${result.mod})` : "";
-            return { content: `Rolled [${rollsText}]${modText} = ${result.total}` };
+            sendPublic(ctx, `Rolled [${rollsText}]${modText} = ${result.total}`);
         },
     });
 
-    registerCommand({
+    reg({
         name: "8ball",
         description: "Ask the magic 8-ball a question",
         options: [
             { name: "question", description: "Your question", type: 3, required: true },
         ],
-        execute: () => {
+        execute: (args, ctx) => {
+            const question = getOptionValue(args, "question");
             const answer = EIGHTBALL_ANSWERS[Math.floor(Math.random() * EIGHTBALL_ANSWERS.length)];
-            return { content: answer };
+            sendPublic(ctx, `${question} -> ${answer}`);
         },
     });
 
-    registerCommand({
+    reg({
         name: "coinflip",
         description: "Flip a coin",
         options: [],
-        execute: () => {
+        execute: (args, ctx) => {
             const result = Math.random() < 0.5 ? "Heads" : "Tails";
-            return { content: result };
+            sendPublic(ctx, result);
         },
     });
 
-    registerCommand({
+    reg({
         name: "color",
         description: "Generate a random hex color",
         options: [],
-        execute: () => {
-            const hex = randomHexColor();
-            return { content: hex };
+        execute: (args, ctx) => {
+            sendPublic(ctx, randomHexColor());
         },
     });
 
-    registerCommand({
+    reg({
         name: "choose",
         description: "Randomly pick one option from a comma separated list",
         options: [
             { name: "options", description: "Comma separated list of options", type: 3, required: true },
         ],
-        execute: (args) => {
+        execute: (args, ctx) => {
             const raw = getOptionValue(args, "options");
             const options = raw.split(",").map((s) => s.trim()).filter(Boolean);
-            if (options.length < 2) return { content: "Give at least two options separated by commas." };
+            if (options.length < 2) return;
             const pick = options[Math.floor(Math.random() * options.length)];
-            return { content: pick };
+            sendPublic(ctx, pick);
         },
     });
 
-    registerCommand({
+    reg({
         name: "myid",
         description: "Show your own user ID",
         options: [],
-        execute: () => {
+        execute: (args, ctx) => {
             const id = UserStore.getCurrentUser()?.id;
-            return { content: id ?? "Could not resolve your user ID." };
+            if (!id) return;
+            sendPublic(ctx, id);
         },
     });
 
-    registerCommand({
+    reg({
         name: "timestamp",
         description: "Convert minutes from now into a Discord dynamic timestamp",
         options: [
             { name: "minutes", description: "Minutes from now", type: 4, required: true },
         ],
-        execute: (args) => {
+        execute: (args, ctx) => {
             const minutes = getOptionValue(args, "minutes");
             const target = Math.floor(Date.now() / 1000) + minutes * 60;
-            return { content: `<t:${target}:R>` };
+            sendPublic(ctx, `<t:${target}:R>`);
         },
     });
 
-    registerCommand({
+    reg({
         name: "remindme",
         description: "Get reminded after a number of minutes",
         options: [
@@ -164,19 +181,19 @@ export function onLoad() {
             const text = getOptionValue(args, "text");
             const channelId = ctx.channel?.id;
 
+            sendPublic(ctx, `Okay, reminding you in ${minutes} minute(s).`);
+
             setTimeout(() => {
                 if (channelId && MessageActions?.sendMessage) {
                     MessageActions.sendMessage(channelId, {
-                        content: `Reminder: ${text}`,
+                        content: `Self-bot\n>>> Reminder: ${text}`,
                     });
                 }
             }, minutes * 60 * 1000);
-
-            return { content: `Okay, I will remind you in ${minutes} minute(s).` };
         },
     });
 
-    registerCommand({
+    reg({
         name: "petpet",
         description: "Generate a petpet gif for a user",
         options: [
@@ -185,13 +202,13 @@ export function onLoad() {
         execute: (args, ctx) => {
             const userId = getOptionValue(args, "user") ?? ctx.user?.id ?? UserStore.getCurrentUser()?.id;
             const avatarUrl = getAvatarUrl(userId, 256);
-            if (!avatarUrl) return { content: "Could not find that user's avatar." };
+            if (!avatarUrl) return;
             const petpetUrl = `https://api.jeyy.xyz/v2/image/petpet?image_url=${encodeURIComponent(avatarUrl)}`;
-            return { content: petpetUrl };
+            sendPublic(ctx, petpetUrl);
         },
     });
 
-    registerCommand({
+    reg({
         name: "triggered",
         description: "Generate a triggered gif for a user",
         options: [
@@ -200,13 +217,13 @@ export function onLoad() {
         execute: (args, ctx) => {
             const userId = getOptionValue(args, "user") ?? ctx.user?.id ?? UserStore.getCurrentUser()?.id;
             const avatarUrl = getAvatarUrl(userId, 256);
-            if (!avatarUrl) return { content: "Could not find that user's avatar." };
+            if (!avatarUrl) return;
             const triggeredUrl = `https://api.jeyy.xyz/v2/image/triggered?image_url=${encodeURIComponent(avatarUrl)}`;
-            return { content: triggeredUrl };
+            sendPublic(ctx, triggeredUrl);
         },
     });
 
-    registerCommand({
+    reg({
         name: "deepfry",
         description: "Deep fry a user's avatar",
         options: [
@@ -215,11 +232,21 @@ export function onLoad() {
         execute: (args, ctx) => {
             const userId = getOptionValue(args, "user") ?? ctx.user?.id ?? UserStore.getCurrentUser()?.id;
             const avatarUrl = getAvatarUrl(userId, 256);
-            if (!avatarUrl) return { content: "Could not find that user's avatar." };
+            if (!avatarUrl) return;
             const deepfryUrl = `https://api.jeyy.xyz/v2/image/deepfry?image_url=${encodeURIComponent(avatarUrl)}`;
-            return { content: deepfryUrl };
+            sendPublic(ctx, deepfryUrl);
         },
     });
 }
 
-export function onUnload() {}
+export function onUnload() {
+    while (unregisterFns.length) {
+        const fn = unregisterFns.pop();
+        try {
+            fn();
+        } catch (e) {
+            console.error("[FunCommands] failed to unregister command:", e);
+        }
+    }
+}
+
